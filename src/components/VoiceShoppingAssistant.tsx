@@ -1,19 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import toast from 'react-hot-toast'
+import { motion } from 'framer-motion'
 import VoiceRecognition from './VoiceRecognition'
 import ShoppingList from './ShoppingList'
 import SmartSuggestions from './SmartSuggestions'
-import { ShoppingItem, VoiceCommand } from '../types'
-import { processVoiceCommand } from '../utils/voiceProcessor'
+import VarietySelector from './VarietySelector'
+import { ShoppingItem } from '../types'
+import { processVoiceCommand, ProcessedVoiceResult } from '../utils/voiceProcessor'
 import { generateSuggestions } from '../utils/suggestionEngine'
-import { 
-  detectLanguage, 
-  translateToEnglish, 
-  translateToUserLanguage,
-  getLocalizedText,
-  SUPPORTED_LANGUAGES
-} from '../utils/geminiService'
+import toast from 'react-hot-toast'
 
 interface VoiceShoppingAssistantProps {
   shoppingList: ShoppingItem[]
@@ -37,139 +31,261 @@ const VoiceShoppingAssistant: React.FC<VoiceShoppingAssistantProps> = ({
   const [transcript, setTranscript] = useState('')
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showVarietySelector, setShowVarietySelector] = useState(false)
+  const [varietySuggestions, setVarietySuggestions] = useState<string[]>([])
+  const [varietyMessage, setVarietyMessage] = useState('')
+  const [varietyCategory, setVarietyCategory] = useState('general')
 
   useEffect(() => {
-    if (transcript && !isProcessing) {
-      handleVoiceInput(transcript)
-    }
-  }, [transcript])
-
-  const handleVoiceInput = async (text: string) => {
-    setIsProcessing(true)
-    setTranscript('')
-    
+    // Generate smart suggestions when shopping list changes
     try {
-      // Detect language if not English
-      let detectedLanguage = selectedLanguage
-      if (selectedLanguage === 'en-US') {
-        detectedLanguage = await detectLanguage(text)
-      }
-      
-      // Translate to English for processing if needed
-      let processedText = text
-      if (detectedLanguage !== 'en-US') {
-        processedText = await translateToEnglish(text, detectedLanguage)
-        toast.success(`Detected ${SUPPORTED_LANGUAGES[detectedLanguage as keyof typeof SUPPORTED_LANGUAGES]?.name || detectedLanguage}`)
-      }
-      
-      const command = await processVoiceCommand(processedText)
-      
-      if (command.type === 'add' && command.item) {
-        const newItem: ShoppingItem = {
-          id: Date.now().toString(),
-          name: command.item,
-          quantity: command.quantity || 1,
-          unit: command.unit || 'piece',
-          category: command.category || 'general',
-          price: command.price,
-          brand: command.brand,
-          notes: command.notes,
-          addedAt: new Date(),
-          isCompleted: false
-        }
-        
-        onAddItem(newItem)
-        toast.success(`Added ${command.quantity || 1} ${command.item} to your list`)
-      } else if (command.type === 'remove' && command.item) {
-        const itemToRemove = shoppingList.find(item => 
-          item.name.toLowerCase().includes(command.item!.toLowerCase())
-        )
-        
-        if (itemToRemove) {
-          onRemoveItem(itemToRemove.id)
-          toast.success(`Removed ${itemToRemove.name} from your list`)
-        } else {
-          toast.error(`Couldn't find ${command.item} in your list`)
-        }
-      } else if (command.type === 'search') {
-        // Handle search functionality
-        toast.success(`Searching for ${command.item}`)
-      }
-      
-      // Generate new suggestions based on the updated list
-      const newSuggestions = await generateSuggestions(shoppingList)
+      const newSuggestions = generateSuggestions(shoppingList)
       setSuggestions(newSuggestions)
-      
     } catch (error) {
-      toast.error('Sorry, I didn\'t understand that command. Please try again.')
+      console.error('Error generating suggestions:', error)
+      setSuggestions([])
+    }
+  }, [shoppingList])
+
+  const handleTranscript = async (newTranscript: string) => {
+    console.log('Processing transcript:', newTranscript)
+    setTranscript(newTranscript)
+    setIsProcessing(true)
+
+    try {
+      const result: ProcessedVoiceResult = await processVoiceCommand(newTranscript, selectedLanguage)
+      console.log('Voice command result:', result)
+      
+      switch (result.type) {
+        case 'add':
+          if (result.item) {
+            onAddItem(result.item)
+            toast.success(result.message, {
+              icon: '✅',
+              style: {
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(10px)'
+              }
+            })
+          }
+          break
+
+        case 'remove':
+          if (result.selectedItem) {
+            // Find and remove the item
+            const itemToRemove = shoppingList.find(item => 
+              item.name.toLowerCase().includes(result.selectedItem!.toLowerCase())
+            )
+            if (itemToRemove) {
+              onRemoveItem(itemToRemove.id)
+              toast.success(result.message, {
+                icon: '🗑️',
+                style: {
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: 'white',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(10px)'
+                }
+              })
+            }
+          }
+          break
+
+        case 'suggest':
+          if (result.suggestions) {
+            setVarietySuggestions(result.suggestions)
+            setVarietyMessage(result.message)
+            setVarietyCategory(result.category || 'general')
+            setShowVarietySelector(true)
+            toast.success('Choose your variety!', {
+              icon: '🎯',
+              style: {
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                color: 'white',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(10px)'
+              }
+            })
+          }
+          break
+
+        case 'confirm':
+          // Handle confirmation of variety selection
+          if (result.selectedItem) {
+            const selectedItem = createShoppingItemFromVariety(result.selectedItem, varietyCategory)
+            onAddItem(selectedItem)
+            setShowVarietySelector(false)
+            toast.success(`Added ${result.selectedItem} to your list!`, {
+              icon: '✅',
+              style: {
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(10px)'
+              }
+            })
+          }
+          break
+
+        case 'error':
+          toast.error(result.message, {
+            icon: '❌',
+            style: {
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: 'white',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(10px)'
+            }
+          })
+          break
+      }
+    } catch (error) {
+      console.error('Error processing voice command:', error)
+      toast.error('Sorry, I had trouble processing your request. Please try again.', {
+        icon: '❌',
+        style: {
+          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+          color: 'white',
+          borderRadius: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(10px)'
+        }
+      })
     } finally {
       setIsProcessing(false)
+      setTranscript('')
     }
   }
 
-  const handleManualAdd = (itemName: string) => {
+  const createShoppingItemFromVariety = (varietyName: string, category: string): ShoppingItem => {
+    return {
+      id: Date.now().toString(),
+      name: varietyName,
+      quantity: 1,
+      unit: getDefaultUnit(varietyName),
+      category,
+      isCompleted: false,
+      addedAt: new Date()
+    }
+  }
+
+  const getDefaultUnit = (itemName: string): string => {
+    const lowerName = itemName.toLowerCase()
+    if (lowerName.includes('apple')) return 'piece'
+    if (lowerName.includes('milk')) return 'gallon'
+    if (lowerName.includes('bread')) return 'loaf'
+    if (lowerName.includes('egg')) return 'dozen'
+    if (lowerName.includes('cheese')) return 'package'
+    if (lowerName.includes('yogurt')) return 'container'
+    if (lowerName.includes('banana')) return 'bunch'
+    if (lowerName.includes('tomato')) return 'piece'
+    if (lowerName.includes('chicken')) return 'pound'
+    if (lowerName.includes('rice')) return 'bag'
+    return 'piece'
+  }
+
+  const handleVarietySelection = (selectedVariety: string) => {
+    const newItem = createShoppingItemFromVariety(selectedVariety, varietyCategory)
+    onAddItem(newItem)
+    setShowVarietySelector(false)
+    toast.success(`Added ${selectedVariety} to your shopping list!`, {
+      icon: '✅',
+      style: {
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: 'white',
+        borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(10px)'
+      }
+    })
+  }
+
+  const handleAddSuggestion = (suggestion: string) => {
     const newItem: ShoppingItem = {
       id: Date.now().toString(),
-      name: itemName,
+      name: suggestion,
       quantity: 1,
       unit: 'piece',
       category: 'general',
-      addedAt: new Date(),
-      isCompleted: false
+      isCompleted: false,
+      addedAt: new Date()
     }
-    
     onAddItem(newItem)
-    toast.success(`Added ${itemName} to your list`)
+    toast.success(`Added ${suggestion} to your shopping list!`, {
+      icon: '✅',
+      style: {
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: 'white',
+        borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(10px)'
+      }
+    })
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Voice Recognition Section */}
-      <div className="lg:col-span-1">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="card"
-        >
-          <VoiceRecognition
-            isListening={isListening}
-            setIsListening={setIsListening}
-            onTranscript={setTranscript}
-            isProcessing={isProcessing}
-          />
-        </motion.div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* Left Column - Voice Recognition and Shopping List */}
+      <div className="space-y-8">
+        <VoiceRecognition
+          isListening={isListening}
+          setIsListening={setIsListening}
+          onTranscript={handleTranscript}
+          isProcessing={isProcessing}
+        />
         
-        {/* Smart Suggestions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="card mt-6"
-        >
-          <SmartSuggestions
-            suggestions={suggestions}
-            onAddSuggestion={handleManualAdd}
-            shoppingList={shoppingList}
-          />
-        </motion.div>
+        <ShoppingList
+          items={shoppingList}
+          onRemoveItem={onRemoveItem}
+          onUpdateItem={onUpdateItem}
+          onAddItem={(itemName) => {
+            const newItem: ShoppingItem = {
+              id: Date.now().toString(),
+              name: itemName,
+              quantity: 1,
+              unit: 'piece',
+              category: 'general',
+              isCompleted: false,
+              addedAt: new Date()
+            }
+            onAddItem(newItem)
+          }}
+        />
       </div>
 
-      {/* Shopping List Section */}
-      <div className="lg:col-span-2">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="card"
-        >
-          <ShoppingList
-            items={shoppingList}
-            onRemoveItem={onRemoveItem}
-            onUpdateItem={onUpdateItem}
-            onAddItem={handleManualAdd}
-          />
-        </motion.div>
+      {/* Right Column - Smart Suggestions */}
+      <div>
+        <SmartSuggestions
+          suggestions={suggestions}
+          onAddSuggestion={handleAddSuggestion}
+          shoppingList={shoppingList}
+        />
       </div>
+
+      {/* Variety Selector Modal */}
+      <VarietySelector
+        isVisible={showVarietySelector}
+        suggestions={varietySuggestions}
+        message={varietyMessage}
+        onSelect={handleVarietySelection}
+        onCancel={() => setShowVarietySelector(false)}
+        category={varietyCategory}
+      />
     </div>
   )
 }

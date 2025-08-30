@@ -40,7 +40,9 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
 
       recognitionRef.current.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript
+        console.log('Voice transcript received:', transcript)
         setTranscript(transcript)
+        // Process the transcript immediately
         onTranscript(transcript)
       }
 
@@ -51,6 +53,7 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
       }
 
       recognitionRef.current.onend = () => {
+        console.log('Speech recognition ended')
         setIsListening(false)
       }
     } else {
@@ -59,7 +62,10 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
     }
   }, [onTranscript, setIsListening])
 
-  const toggleListening = () => {
+  const toggleListening = (e: React.MouseEvent) => {
+    e.preventDefault() // Prevent any default behavior
+    e.stopPropagation() // Stop event propagation
+    
     if (!isSupported) return
 
     if (isListening) {
@@ -67,8 +73,14 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
     } else {
       setError('')
       setTranscript('')
-      recognitionRef.current?.start()
-      setIsListening(true)
+      try {
+        recognitionRef.current?.start()
+        setIsListening(true)
+        console.log('Started listening...')
+      } catch (error) {
+        console.error('Error starting speech recognition:', error)
+        setError('Failed to start voice recognition')
+      }
     }
   }
 
@@ -103,6 +115,7 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
           whileTap={{ scale: 0.95 }}
           onClick={toggleListening}
           disabled={isProcessing}
+          type="button" // Explicitly set button type
           className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${
             isListening
               ? 'bg-gradient-to-r from-red-500 to-pink-500 shadow-lg shadow-red-500/25'
@@ -149,28 +162,13 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
           {isListening && (
             <>
               <motion.div
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 0, 0.5],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
                 className="absolute inset-0 border-2 border-red-400 rounded-full"
               />
               <motion.div
-                animate={{
-                  scale: [1, 1.4, 1],
-                  opacity: [0.3, 0, 0.3],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: 0.5
-                }}
+                animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
                 className="absolute inset-0 border-2 border-pink-400 rounded-full"
               />
             </>
@@ -179,43 +177,42 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
       </div>
 
       {/* Status Display */}
-      <div className="text-center mb-4">
-        <AnimatePresence mode="wait">
-          {isProcessing ? (
-            <motion.div
-              key="processing"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center justify-center space-x-2 text-purple-400"
-            >
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm font-medium">Processing your command...</span>
-            </motion.div>
-          ) : isListening ? (
-            <motion.div
-              key="listening"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center justify-center space-x-2 text-red-400"
-            >
-              <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Listening... Speak now!</span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="text-gray-400 text-sm"
-            >
-              Click microphone to start
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <AnimatePresence mode="wait">
+        {isListening && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-center mb-4"
+          >
+            <p className="text-green-400 font-medium">Listening...</p>
+            <p className="text-gray-400 text-sm">Speak your command</p>
+          </motion.div>
+        )}
+        
+        {isProcessing && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-center mb-4"
+          >
+            <p className="text-blue-400 font-medium">Processing...</p>
+            <p className="text-gray-400 text-sm">Understanding your command</p>
+          </motion.div>
+        )}
+        
+        {!isListening && !isProcessing && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-center mb-4"
+          >
+            <p className="text-gray-400">Click microphone to start</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Transcript Display */}
       {transcript && (
@@ -224,8 +221,8 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
           animate={{ opacity: 1, y: 0 }}
           className="bg-gray-700/50 rounded-xl p-4 mb-4"
         >
-          <div className="text-xs text-gray-400 mb-2">You said:</div>
-          <div className="text-white font-medium">{transcript}</div>
+          <p className="text-gray-300 text-sm font-medium mb-2">You said:</p>
+          <p className="text-white font-semibold">"{transcript}"</p>
         </motion.div>
       )}
 
@@ -234,33 +231,20 @@ const VoiceRecognition: React.FC<VoiceRecognitionProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 mb-4"
+          className="bg-red-500/20 border border-red-500/30 rounded-xl p-4 mb-4"
         >
-          <div className="text-red-400 text-sm font-medium mb-1">Error</div>
-          <div className="text-red-300 text-sm">{error}</div>
+          <p className="text-red-400 text-sm">Error: {error}</p>
         </motion.div>
       )}
 
-      {/* Voice Command Examples */}
+      {/* Example Commands */}
       <div className="bg-gray-700/30 rounded-xl p-4">
-        <div className="text-xs text-gray-400 mb-3">Try saying:</div>
-        <div className="space-y-2">
-          {[
-            "Add milk to my list",
-            "I need 5 organic apples",
-            "Remove bread from list",
-            "Find organic honey"
-          ].map((example, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="text-gray-300 text-sm bg-gray-600/30 rounded-lg px-3 py-2"
-            >
-              "{example}"
-            </motion.div>
-          ))}
+        <h4 className="text-gray-300 font-medium mb-2">Try saying:</h4>
+        <div className="space-y-1 text-sm">
+          <p className="text-gray-400">• "Apples" (shows varieties)</p>
+          <p className="text-gray-400">• "Add milk"</p>
+          <p className="text-gray-400">• "5 apples"</p>
+          <p className="text-gray-400">• "Remove bread"</p>
         </div>
       </div>
     </div>

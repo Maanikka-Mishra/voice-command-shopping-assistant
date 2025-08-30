@@ -1,3 +1,6 @@
+/* Custom Font Loading */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -237,9 +240,6 @@ input:focus, textarea:focus, select:focus {
     @apply border-2 border-white;
   }
 }
-
-/* Custom Font Loading */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 /* Code Font */
 code {

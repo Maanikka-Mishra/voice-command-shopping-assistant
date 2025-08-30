@@ -77,7 +77,7 @@ const substitutes: { [key: string]: string[] } = {
   'meat': ['tofu', 'tempeh', 'seitan', 'legumes', 'mushrooms']
 }
 
-export async function generateSuggestions(shoppingList: ShoppingItem[]): Promise<string[]> {
+export function generateSuggestions(shoppingList: ShoppingItem[]): string[] {
   const suggestions: string[] = []
   
   // Get current season
@@ -98,14 +98,9 @@ export async function generateSuggestions(shoppingList: ShoppingItem[]): Promise
   const substituteSuggestions = getSubstituteSuggestions(shoppingList)
   suggestions.push(...substituteSuggestions.slice(0, 3))
   
-  // Add organic and premium suggestions
-  const organicSuggestions = getOrganicSuggestions(shoppingList)
-  suggestions.push(...organicSuggestions.slice(0, 2))
-  
-  // Remove duplicates and limit to 8 suggestions for more variety
-  const uniqueSuggestions = [...new Set(suggestions)].slice(0, 8)
-  
-  return uniqueSuggestions
+  // Remove duplicates and limit to 10 suggestions
+  const uniqueSuggestions = [...new Set(suggestions)]
+  return uniqueSuggestions.slice(0, 10)
 }
 
 function getCurrentSeason(): string {
@@ -119,17 +114,12 @@ function getCurrentSeason(): string {
 function getFrequentSuggestions(shoppingList: ShoppingItem[]): string[] {
   const suggestions: string[] = []
   
-  // Check if user has items that are frequently bought together
   for (const item of shoppingList) {
-    const relatedItems = frequentlyBoughtTogether[item.name.toLowerCase()]
-    if (relatedItems) {
-      // Only suggest items that aren't already in the list
-      const newSuggestions = relatedItems.filter(relatedItem => 
-        !shoppingList.some(listItem => 
-          listItem.name.toLowerCase().includes(relatedItem.toLowerCase())
-        )
-      )
-      suggestions.push(...newSuggestions)
+    const itemName = item.name.toLowerCase()
+    for (const [key, relatedItems] of Object.entries(frequentlyBoughtTogether)) {
+      if (itemName.includes(key)) {
+        suggestions.push(...relatedItems)
+      }
     }
   }
   
@@ -139,21 +129,54 @@ function getFrequentSuggestions(shoppingList: ShoppingItem[]): string[] {
 function getSubstituteSuggestions(shoppingList: ShoppingItem[]): string[] {
   const suggestions: string[] = []
   
-  // Check if user has items that have good substitutes
   for (const item of shoppingList) {
-    const itemSubstitutes = substitutes[item.name.toLowerCase()]
-    if (itemSubstitutes) {
-      // Only suggest substitutes that aren't already in the list
-      const newSuggestions = itemSubstitutes.filter(substitute => 
-        !shoppingList.some(listItem => 
-          listItem.name.toLowerCase().includes(substitute.toLowerCase())
-        )
-      )
-      suggestions.push(...newSuggestions)
+    const itemName = item.name.toLowerCase()
+    for (const [key, substitutes] of Object.entries(substitutes)) {
+      if (itemName.includes(key)) {
+        suggestions.push(...substitutes)
+      }
     }
   }
   
   return suggestions
+}
+
+export function getSuggestionReason(suggestion: string, shoppingList: ShoppingItem[]): {
+  reason: string
+  type: 'seasonal' | 'trending' | 'frequent' | 'substitute'
+} {
+  const currentSeason = getCurrentSeason()
+  const seasonalItems = seasonalItems[currentSeason as keyof typeof seasonalItems] || []
+  
+  if (seasonalItems.includes(suggestion.toLowerCase())) {
+    return { reason: 'Seasonal item', type: 'seasonal' }
+  }
+  
+  if (trendingItems.includes(suggestion)) {
+    return { reason: 'Trending item', type: 'trending' }
+  }
+  
+  // Check if it's a frequently bought together item
+  for (const item of shoppingList) {
+    const itemName = item.name.toLowerCase()
+    for (const [key, relatedItems] of Object.entries(frequentlyBoughtTogether)) {
+      if (itemName.includes(key) && relatedItems.includes(suggestion)) {
+        return { reason: 'Frequently bought together', type: 'frequent' }
+      }
+    }
+  }
+  
+  // Check if it's a substitute
+  for (const item of shoppingList) {
+    const itemName = item.name.toLowerCase()
+    for (const [key, substitutes] of Object.entries(substitutes)) {
+      if (itemName.includes(key) && substitutes.includes(suggestion)) {
+        return { reason: 'Good substitute', type: 'substitute' }
+      }
+    }
+  }
+  
+  return { reason: 'Smart suggestion', type: 'trending' }
 }
 
 export function getPersonalizedSuggestions(
